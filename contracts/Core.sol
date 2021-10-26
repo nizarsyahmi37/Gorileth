@@ -4,6 +4,148 @@
 pragma solidity ^0.8.0;
 
 
+
+
+/**
+ * @title Minting
+ * 
+ * @dev This has all the functions related to creating a gorilla.
+ */
+contract Minting is Auction {
+    
+    
+    /**
+     * @dev The limits for contract owner to create gorillas.
+     */
+    uint256 public constant promoLimit = 5000;
+    uint256 public constant gen0Limit = 45000;
+    
+    
+    /**
+     * @dev Default values for gen0 auctions.
+     */
+    uint256 public constant gen0StartingPrice = 25 ether;
+    uint256 public constant get0AuctionDuration = 1 days;
+    
+    
+    /**
+     * @dev Counts the number of gorillas created by contract owner.
+     */
+    uint256 public promoCreatedCount;
+    uint256 public gen0CreatedCount;
+    
+    
+    /**
+     * @dev This creates promo gorillas.
+     * 
+     * @param _genes the encoded genes of the kitten to be created, any value is accepted
+     * @param _owner the future owner of the created kittens. Default to contract COO
+     * 
+     * Requirement:
+     * - Promo gorillas created must not exceed the limit. 
+     * - Can only be called by the current COO.
+     */
+    function createPromoGorillas(uint256 _genes, address _owner) external onlyCOO {
+        
+        
+        /**
+         * @dev Take the address provided as the owner for the gorilla.
+         */
+        address gorillaOwner = _owner;
+        
+        
+        /**
+         * @dev This ensure the owner for the gorilla will be assigned to the current COO address if the owner is address(0).
+         */
+        if (gorillaOwner == address(0)) {
+             gorillaOwner = cooAddress;
+        }
+        
+        
+        /**
+         * @dev Ensure that total promo gorilla does not exceed the limit.
+         */
+        require(promoCreatedCount < promoLimit);
+        
+        
+        /**
+         * @dev Increase the count for promo gorilla and create the gorilla.
+         */
+        promoCreatedCount++;
+        _createGorilla(0, 0, 0, _genes, gorillaOwner);
+        
+    }
+    
+    
+    /**
+     * @dev Create a new gen0 gorilla using the genes provided and auction it.
+     */
+    function createGen0Auction(uint256 _genes) external onlyCOO {
+        
+        
+        /**
+         * @dev Ensure that total gen0 gorilla does not exceed the limit.
+         */
+        require(gen0CreatedCount < gen0Limit);
+        
+        
+        /**
+         * @dev This create the new gen0 gorilla and approve it for auction.
+         */
+        uint256 gorillaId = _createGorilla(0, 0, 0, _genes, address(this));
+        _approve(gorillaId, address(saleAuction));
+        
+        
+        /**
+         * @dev This create the auction for this new gen0 gorilla.
+         */
+        saleAuction.createAuction(gorillaId, _computeNextGen0Price(), 0, get0AuctionDuration, address(this));
+        
+        
+        /**
+         * @dev This will increase the number of gen0 created.
+         */
+        gen0CreatedCount++;
+    }
+    
+    
+    /**
+     * @dev This compute the next starting price.
+     */
+    function _computeNextGen0Price() internal view returns (uint256) {
+        
+        
+        /**
+         * @dev This set the average price for gen0 auction based on the average from the past gen0 prices.
+         */
+        uint256 avePrice = saleAuction.averageGen0SalePrice();
+        
+        
+        /**
+         * @dev Ensure that the average price does not overflow.
+         */
+        require(avePrice == uint256(uint128(avePrice)));
+        
+        
+        /**
+         * @dev This set the next price for gen0 auction to be 150% of the average price.
+         */
+        uint256 nextPrice = (avePrice * 3 / 2);
+        
+        
+        /**
+         * @dev Ensure that auction price will not be lower than the default starting price.
+         */
+        if (nextPrice < gen0StartingPrice) {
+            nextPrice = gen0StartingPrice;
+        }
+        return nextPrice;
+        
+    }
+    
+}
+
+
 /**
  * @title Core
  * 
