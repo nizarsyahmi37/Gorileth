@@ -7,6 +7,183 @@ pragma solidity ^0.8.0;
 
 
 /**
+ * @title Auction
+ * 
+ * @dev This handles creating auctions for sale and siring of kitties.
+ */
+contract Auction is Breeding {
+    
+    
+    /**
+     * @dev Only CEO can sets the reference to the sale auction — for gen0 and p2p sale.
+     * 
+     * @param _address - Address of sale contract.
+     */
+    function setSaleAuctionAddress(address _address) public onlyCEO {
+        
+        
+        /**
+         * @dev Use the address provided as the candidateContract.
+         */
+        SaleInterface candidateContract = SaleInterface(_address);
+        
+        
+        /**
+         * @dev Verify it is the correct contract.
+         */
+        require(candidateContract.isSaleAuction());
+        
+        
+        /**
+         * @dev Set address of the new contract.
+         */
+        saleAuction = candidateContract;
+        
+    }
+    
+    
+    /**
+     * @dev Only CEO can set the reference to the siring auction — for siring rights.
+     * 
+     * @param _address - Address of siring contract.
+     */
+    function setSiringAuctionAddress(address _address) public onlyCEO {
+        
+        
+        /**
+         * @dev Use the address provided as the candidateContract.
+         */
+        SiringInterface candidateContract = SiringInterface(_address);
+        
+        
+        /**
+         * @dev Verify it is the correct contract.
+         */
+        require(candidateContract.isSiringAuction());
+        
+        
+        /**
+         * @dev Set address of the new contract.
+         */
+        siringAuction = candidateContract;
+        
+    }
+    
+    
+    /**
+     * @dev Put a gorilla up for sale auction.
+     */
+    function createSaleAuction(uint256 _gorillaId, uint256 _startingPrice, uint256 _endingPrice, uint256 _duration) external whenNotPaused {
+        
+        
+        /**
+         * @dev Ensure that the gorilla belongs to the address and is not pregnant.
+         */
+        require(_owns(msg.sender, _gorillaId));
+        require(!isPregnant(_gorillaId));
+        
+        
+        /**
+         * @dev Approve the gorilla for the sale auction contract.
+         */
+        _approve(_gorillaId, address(saleAuction));
+        
+        
+        /**
+         * @dev Create sale auction for the gorilla.
+         */
+        saleAuction.createAuction(_gorillaId, _startingPrice, _endingPrice, _duration, msg.sender);
+        
+    }
+    
+    
+    /**
+     * @dev Put a gorilla up for siring auction.
+     */
+    function createSiringAuction(uint256 _gorillaId, uint256 _startingPrice, uint256 _endingPrice, uint256 _duration) external whenNotPaused {
+        
+        
+        /**
+         * @dev Ensure that the gorilla belongs to the address and is ready to breed.
+         */
+        require(_owns(msg.sender, _gorillaId));
+        require(isReadyToBreed(_gorillaId));
+        
+        
+        /**
+         * @dev Approve the gorilla for the siring auction contract.
+         */
+        _approve(_gorillaId, address(siringAuction));
+        
+        
+        /**
+         * @dev Create siring auction for the gorilla.
+         */
+        siringAuction.createAuction(_gorillaId, _startingPrice, _endingPrice, _duration, msg.sender);
+        
+    }
+    
+    
+    /**
+     * @dev Complete siring auction by bidding to immediately breed with sire on auction.
+     * 
+     * @param _sireId - ID of the sire on auction.
+     * @param _matronId - ID of the matron owned by the bidder.
+     */
+    function bidOnSiringAuction(uint256 _sireId, uint256 _matronId) external payable whenNotPaused {
+        
+        
+        /**
+         * @dev Check that the address own the gorilla, ensure that it is ready to breed and can breed with the sire.
+         */
+        require(_owns(msg.sender, _matronId));
+        require(isReadyToBreed(_matronId));
+        require(_canBreedWithViaAuction(_matronId, _sireId));
+        
+        
+        /**
+         * @dev Define the current price of the auction for the gorilla.
+         */
+        uint256 currentPrice = siringAuction.getCurrentPrice(_sireId);
+        
+        
+        /**
+         * @dev Check whether the bid is higher than the total of current price for the gorilla inclusive of birth fee.
+         */
+        require(msg.value >= currentPrice + autoBirthFee);
+        
+        
+        /**
+         * @dev Accept bid for the sire and initiate breeding with the matron.
+         */
+        siringAuction.bid{value : msg.value - autoBirthFee}(_sireId);
+        _breedWith(uint32(_matronId), uint32(_sireId));
+        
+    }
+    
+    
+    /**
+     * @dev Only CLevel can transfers the balance of the auction contracts to the Core contract.
+     */
+    function withdrawAuctionBalances() external onlyCLevel {
+        
+        /**
+         * @dev Withdraw the balance from sale auction.
+         */
+        saleAuction.withdrawBalance();
+        
+        
+        /**
+         * @dev Withdraw the balance from siring auction.
+         */
+        siringAuction.withdrawBalance();
+        
+    }
+    
+}
+
+
+/**
  * @title Minting
  * 
  * @dev This has all the functions related to creating a gorilla.
